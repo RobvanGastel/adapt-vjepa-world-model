@@ -1,12 +1,12 @@
+from typing import Tuple, Mapping
+
 import torch
 from torch import nn
 import torch.nn.functional as F
 from einops import rearrange
 
-from typing import Tuple, Mapping
-
 from video_jepa.transformations import (
-    convert_grid_coordinates, map_coordinates_3d, convert_grid_coordinates, heatmaps_to_points
+    convert_grid_coordinates, map_coordinates_3d, heatmaps_to_points
 )
 
 class TrackingHead(nn.Module):
@@ -38,32 +38,33 @@ class TrackingHead(nn.Module):
 
     def estimate_trajectory(
             self,
-            inter_query_points,
+            interp_query_points,
             features,
             query_points,
             video_size
     ):
         """Samples the feature grid at the query point locations."""
         
-        
         # 1. Compute Cost Volume (Similarity)
         # Einsum: (B N D) x (B T H W D) -> (T B N H W)
         cost_volume = torch.einsum(
             'bnd,bthwd->tbnhw',
-            inter_query_points,
+            interp_query_points,
             features,
         )
-        
+
         # Reshape for Softmax (Flatten H*W)
         pos = rearrange(cost_volume, 't b n h w -> b n t h w') # B N T H W
         pos_sm = pos.reshape(pos.size(0), pos.size(1), pos.size(2), -1) # B N T (H*W)
-        softmaxed = F.softmax(pos_sm * self.softmax_temperature, dim=-1) # B N T (H*W)
+        softmaxed = F.softmax(pos_sm * 20, dim=-1) # B N T (H*W)
         pos = softmaxed.view_as(pos) # B N T H W
 
         # 2. Convert Heatmaps to Points
         # Assumes original video size is passed to utility for correct coordinate scaling
-        tracks = heatmaps_to_points(pos, video_size, query_points=query_points)
-        
+        image_shape = (1, features.shape[1], video_size[0], video_size[1])
+        tracks = heatmaps_to_points(pos, image_shape, query_points=query_points)
+
+
         # 3. Predict Occlusion (LocoTrack's logic)
         occlusion_features = torch.cat(
             [
@@ -112,4 +113,8 @@ class TrackingHead(nn.Module):
             query_points=query_points,
             video_size=video_size
         )
+        # results shapes: 
+        # tracks: torch.Size([1, 10, 6, 2])
+        # occlusion: torch.Size([1, 10, 6])
+        # expected_dist: torch.Size([1, 10, 6])
         return results
