@@ -4,9 +4,6 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-from dataclasses import dataclass
-from typing import Optional
-
 import os
 import cv2
 import imageio
@@ -15,20 +12,6 @@ from PIL import Image
 
 import torch
 from torchvision.transforms import ColorJitter, GaussianBlur
-
-
-@dataclass(eq=False)
-class CoTrackerData:
-    """
-    Dataclass for storing video tracks data.
-    """
-
-    video: torch.Tensor  # B, S, C, H, W
-    query_points: torch.Tensor  # B, S * N, 3 (t, x, y)
-    trajectory: torch.Tensor # B, S, N, 2
-    occluded: torch.Tensor  # B, S, N
-    valid: Optional[torch.Tensor] = None  # B, S, N
-    seq_name: Optional[str] = None
 
 
 class CoTrackerDataset(torch.utils.data.Dataset):
@@ -84,22 +67,7 @@ class CoTrackerDataset(torch.utils.data.Dataset):
         return NotImplementedError
 
     def __getitem__(self, index):
-        gotit = False
-
-        sample, gotit = self.getitem_helper(index)
-        if not gotit:
-            print("warning: sampling failed")
-            # fake sample, so we can still collate
-            sample = CoTrackerData(
-                video=torch.zeros(
-                    (self.seq_len, 3, self.crop_size[0], self.crop_size[1])
-                ),
-                trajectory=torch.zeros((self.seq_len, self.traj_per_sample, 2)),
-                visibility=torch.zeros((self.seq_len, self.traj_per_sample)),
-                valid=torch.zeros((self.seq_len, self.traj_per_sample)),
-            )
-
-        return sample, gotit
+        return self.getitem_helper(index)
 
     def add_photometric_augs(self, rgbs, trajs, visibles, eraser=True, replace=True):
         T, N, _ = trajs.shape
@@ -541,32 +509,34 @@ class KubricMovifDataset(CoTrackerDataset):
         valids = valids[:, :final_num_traj]
 
         S, N, _ = trajs.shape # (S, N, 1)
-        t_coords = torch.arange(S).float()[:, None, None].expand(S, N, 1)  
+        t_coords = torch.arange(S).float()[:, None, None].expand(S, N, 1)
+
         # Combine into (S, N, 3): (t, y, x)
         query_points = torch.cat([t_coords, trajs[..., 1:2], trajs[..., 0:1]], dim=-1)
         rgbs = torch.from_numpy(rgbs).permute(0, 3, 1, 2).float()
 
         # Format expected: [B, N, T, 2] = (x, y)
-        gt_tracks = trajs.permute(1, 0, 2)[..., [2, 1]].unsqueeze(0)  # (1, N, S, 2)
+        # gt_tracks = trajs[..., [2, 1]]  # (N, S, 2)
 
         # 3. Create ground-truth occlusion mask
         # visibles == 1 → visible → occluded = False
-        gt_occluded = (~visibles.bool().T).unsqueeze(0)  # (1, N, S)
+        gt_occluded = ~visibles.bool().T # (N, S)
 
         # # Optional sanity check
         # assert gt_tracks.shape == (1, N, S, 2)
         # assert gt_occluded.shape == (1, N, S)
         # assert query_points.shape == (N, 3)
 
-        sample = CoTrackerData(
-            video=rgbs,
-            trajectory=gt_tracks,
-            query_points=query_points,
-            occluded=gt_occluded,
-            valid=valids,
-            seq_name=seq_name,
-        )
-        return sample, gotit
+
+        return {
+            "video" : rgbs,
+            "trajectory" : trajs,
+            "query_points" : query_points,
+            "occluded" : gt_occluded,
+            "valid" : valids,
+            "name" : seq_name,
+            "succeeded" : gotit
+        }
 
     def __len__(self):
         return len(self.seq_names)
