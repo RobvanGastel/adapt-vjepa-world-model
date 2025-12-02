@@ -18,14 +18,15 @@ class TrackingHead(nn.Module):
     def get_query_features(
             self,
             features,
-            query_points
+            query_points,
+            video_size
     ):
         B, T, H, W, D = features.shape
 
         position_in_grid = convert_grid_coordinates( 
             query_points,
-            (T, H, W), # Shape of the *grid* (Time, Height, Width)
-            (T, H, W), # Target grid shape (same as source for now)
+            (T*2, video_size[0], video_size[1]), # Shape of the *grid* (Time, Height, Width)
+            (T, H, W), # TODO: Target grid shape (same as source for now)?
             coordinate_format='tyx',
         )
 
@@ -61,6 +62,7 @@ class TrackingHead(nn.Module):
 
         # 2. Convert Heatmaps to Points
         # Assumes original video size is passed to utility for correct coordinate scaling
+        # TODO: Check
         image_shape = (1, features.shape[1], video_size[0], video_size[1])
         tracks = heatmaps_to_points(pos, image_shape, query_points=query_points)
 
@@ -93,7 +95,7 @@ class TrackingHead(nn.Module):
 
     def forward(
         self,
-        features: torch.Tensor, # B T Hf Wf D (The raw output of V-JEPA)
+        features: torch.Tensor, # B Tf Hf Wf D (The raw output of V-JEPA)
         query_points: torch.Tensor,  # B N 3 (t, y, x in original pixel space)
         video_size: Tuple[int, int], # Original (H, W) for final scaling
     ) -> Mapping[str, torch.Tensor]:
@@ -104,7 +106,8 @@ class TrackingHead(nn.Module):
         # Get Query Features via Interpolation
         interp_query_points = self.get_query_features(
             normalized_features,
-            query_points
+            query_points,
+            video_size
         ) # B N D
 
         results = self.estimate_trajectory(

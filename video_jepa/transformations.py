@@ -49,37 +49,20 @@ def map_coordinates_3d(
   )
   return out
 
-def convert_grid_coordinates(
-    coords: torch.Tensor,
-    input_grid_size: Sequence[int],
-    output_grid_size: Sequence[int],
-    coordinate_format: str = 'xy',
-) -> torch.Tensor:
-  """Convert grid coordinates to correct format."""
-  if isinstance(input_grid_size, tuple):
-    input_grid_size = torch.tensor(input_grid_size, device=coords.device)
-  if isinstance(output_grid_size, tuple):
-    output_grid_size = torch.tensor(output_grid_size, device=coords.device)
+def convert_grid_coordinates(coords, input_grid_size, output_grid_size, coordinate_format='xy'):
+    input_grid_size = torch.as_tensor(input_grid_size, device=coords.device, dtype=coords.dtype)
+    output_grid_size = torch.as_tensor(output_grid_size, device=coords.device, dtype=coords.dtype)
 
-  if coordinate_format == 'xy':
-    if input_grid_size.shape[0] != 2 or output_grid_size.shape[0] != 2:
-      raise ValueError(
-          'If coordinate_format is xy, the shapes must be length 2.'
-      )
-  elif coordinate_format == 'tyx':
-    if input_grid_size.shape[0] != 3 or output_grid_size.shape[0] != 3:
-      raise ValueError(
-          'If coordinate_format is tyx, the shapes must be length 3.'
-      )
-    if input_grid_size[0] != output_grid_size[0]:
-      raise ValueError('converting frame count is not supported.')
-  else:
-    raise ValueError('Recognized coordinate formats are xy and tyx.')
+    if coordinate_format == 'xy' and len(input_grid_size) != 2:
+        raise ValueError("Expected 2-D coordinates for 'xy'")
+    if coordinate_format == 'tyx' and len(input_grid_size) != 3:
+        raise ValueError("Expected 3-D coordinates for 'tyx'")
 
-  position_in_grid = coords
-  position_in_grid = position_in_grid * output_grid_size / input_grid_size
+    if coordinate_format == 'tyx' and input_grid_size[0] != output_grid_size[0]:
+        raise ValueError("Time resizing not supported.")
 
-  return position_in_grid
+    scale = (output_grid_size / input_grid_size).view(*([1] * (coords.ndim - 1)), -1)
+    return coords * scale
 
 
 def soft_argmax_heatmap_batched(softmax_val, threshold=5):

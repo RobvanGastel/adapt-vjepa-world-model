@@ -515,18 +515,9 @@ class KubricMovifDataset(CoTrackerDataset):
         query_points = torch.cat([t_coords, trajs[..., 1:2], trajs[..., 0:1]], dim=-1)
         rgbs = torch.from_numpy(rgbs).permute(0, 3, 1, 2).float()
 
-        # Format expected: [B, N, T, 2] = (x, y)
-        # gt_tracks = trajs[..., [2, 1]]  # (N, S, 2)
-
         # 3. Create ground-truth occlusion mask
         # visibles == 1 → visible → occluded = False
-        gt_occluded = ~visibles.bool().T # (N, S)
-
-        # # Optional sanity check
-        # assert gt_tracks.shape == (1, N, S, 2)
-        # assert gt_occluded.shape == (1, N, S)
-        # assert query_points.shape == (N, 3)
-
+        gt_occluded = ~visibles.bool() # (N, S)
 
         return {
             "video" : rgbs,
