@@ -5,6 +5,8 @@ What does the encoder's latent space look like?
 - [x] PCA without masking.
 - [x] PCA with masking, what will we recover?
 
+Check out the `Exploration.ipynb` notebook for a more detailed walkthrough of the code and ideas behind it.
+
 _PCA visualizations_ </br>
 The V-JEPA2 model takes in two frames merges them to output in the output space as the tubelet size is 2. Give a number of frames of a kitesurfing video below.
 ![](/assets/frames_kitesurfing.png?raw=true)
