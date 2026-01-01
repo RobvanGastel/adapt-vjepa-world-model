@@ -1,3 +1,4 @@
+import cv2
 import torch
 import torch.nn as nn
 
@@ -27,8 +28,7 @@ class WorldModel(nn.Module):
         self.patch_h = input_size[0] // self.patch_size 
         self.patch_w = input_size[1] // self.patch_size
 
-        # TODO: Frames divided by tubelet size?
-        # TODO: Input size to calculate # of patches
+        # Latent predictor
         self.latent_predictor = ViT(
             num_patches=self.patch_h * self.patch_w,
             num_frames=self.num_hist,
@@ -42,12 +42,11 @@ class WorldModel(nn.Module):
         )
         self.predictor_criterion = nn.MSELoss()
 
-        # Initial stage could be PCA
+        # Decoder, initial stage could be PCA
         self.latent_loss_weight = 0.25
         self.decoder = VQVAE(
-            in_channel=1024,
             channel=384,
-            n_embed=1024,
+            n_embed=2048,
             emb_dim=1024,
             n_res_block=4,
             n_res_channel=128,
@@ -55,23 +54,25 @@ class WorldModel(nn.Module):
         )
         self.decoder_criterion = nn.MSELoss()
     
-    def forward(self, x):
-        print(x.shape)
+    def forward(self, x : torch.Tensor):
+        B, C, T, H, W = x.shape
         z = self.encoder(x)
         
+        # TODO: Consider Einops for rearrange
         # (B, frames, patches, embed_dim)
         patch_t = z.shape[1] // (self.patch_w * self.patch_h)
-        z = z.reshape(z.shape[0], patch_t, -1, z.shape[-1])
+        z = z.reshape(B, patch_t, -1, z.shape[-1])
 
-        # (b, num_hist / num_pred, num_patches, dim)
+        # (b, num_hist or num_pred, num_patches, dim)
         z_src = z[:, : self.num_hist, :, :]
         z_tgt = z[:, self.num_pred :, :, :]
 
-        # Latent Predictor
-        z_src = z_src.reshape(z.shape[0], -1, z.shape[-1]).detach()
+        # Latent Predictor, ViT
+        # (b * frames * num_patches, dim)
+        z_src = z_src.reshape(B, -1, z.shape[-1]).detach()
         z_pred = self.latent_predictor(z_src)
 
-        # Decoder, VQVAE, TODO: Initial test with PCA?
+        # Decoder, VQVAE
         visual_pred, diff_pred = self.decoder(
             z_tgt,
             self.patch_h,
@@ -79,20 +80,25 @@ class WorldModel(nn.Module):
         )
 
         # Loss
-        # (B, num_pred, 3, *input_size), TODO: Include tubelet size
-        visual_tgt = x[:, self.num_pred :, ...]
-        
+        # (B, C, num_pred, H, W)
+        visual_tgt = x[:, :, self.num_pred * self.tubelet_size :, ...].moveaxis(1, 2)
+        # Reshape to (B, tubelet, num_pred, C, H, W) to average tubelet size
+        visual_tgt = visual_tgt.view(B, -1, self.num_pred, C, H, W).mean(dim=1)
+        visual_pred = visual_pred.view(B, self.num_pred, C, H, W)
+
         # Decoder loss
-        print(visual_tgt.shape, visual_pred.shape)
         recon_loss = self.decoder_criterion(visual_pred, visual_tgt)
         decoder_loss = recon_loss + self.latent_loss_weight * diff_pred
 
+        # Debugging logs
+        torch.save(z_pred[0][-1], "z_pred.pt")
+        torch.save(z_tgt[0][-1], "z_tgt.pt")
+
+        cv2.imwrite("tgt.png", visual_tgt[0][-1].moveaxis(0, -1).detach().cpu().numpy() * 255)
+        cv2.imwrite("pred.png", visual_pred[0][-1].moveaxis(0, -1).detach().cpu().numpy() * 255)
+
+
         # Predictor loss
-        z_pred = z_pred.reshape(z_tgt.shape[0], self.num_pred, self.patch_w * self.patch_h, self.embed_dim)
-
-        torch.save(z_pred[0][0], "z_pred.pt")
-        torch.save(z_tgt[0][0], "z_tgt.pt")
-
+        z_pred = z_pred.reshape(B, self.num_pred, self.patch_w * self.patch_h, self.embed_dim)
         z_loss = self.predictor_criterion(z_pred, z_tgt)
-
         return z_loss, decoder_loss

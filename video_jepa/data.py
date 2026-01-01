@@ -32,9 +32,6 @@ class VideoDataset(torch.utils.data.Dataset):
         self.seq_names = [
             f for f in os.listdir(data_root) if os.path.isdir(os.path.join(data_root, f))
         ]
-        # if self.split == "valid":
-        #     self.seq_names = self.seq_names[:30]
-            
         print("found %d unique videos in %s" % (len(self.seq_names), self.data_root))
 
     def __getitem__(self, index):
@@ -42,17 +39,26 @@ class VideoDataset(torch.utils.data.Dataset):
         rgb_path = os.path.join(self.data_root, seq_name, "frames")
 
         img_paths = sorted(os.listdir(rgb_path))
+        T = len(img_paths)
+
+        # Randomly grab a subsequent chain of images.        
+        if T > self.seq_len:
+            start = np.random.randint(0, T - self.seq_len + 1)
+            img_paths = img_paths[start : start + self.seq_len]
+        else:
+            img_paths = img_paths[:self.seq_len]
+
+        # Load the video
         rgbs = [
             cv2.imread(os.path.join(rgb_path, p))
             for p in img_paths
         ]
 
         rgbs = np.stack(rgbs)[: self.seq_len]  # optional truncation
-
         if self.crop_size is not None:
             rgbs = self.crop_rgbs(rgbs, self.crop_size)
 
-        rgbs = torch.from_numpy(rgbs).permute(0, 3, 1, 2).float()
+        rgbs = torch.from_numpy(rgbs).permute(0, 3, 1, 2).float() / 255
 
         return {
             "video": rgbs,

@@ -7,8 +7,10 @@ from einops import rearrange
 NUM_FRAMES = 1
 NUM_PATCHES = 1
 
+
 def pair(t):
     return t if isinstance(t, tuple) else (t, t)
+
 
 def generate_mask_matrix(npatch, nwindow):
     zeros = torch.zeros(npatch, npatch)
@@ -19,6 +21,7 @@ def generate_mask_matrix(npatch, nwindow):
         rows.append(row)
     mask = torch.cat(rows, dim=0).unsqueeze(0).unsqueeze(0)
     return mask
+
 
 class FeedForward(nn.Module):
     def __init__(self, dim, hidden_dim, dropout = 0.):
@@ -34,6 +37,7 @@ class FeedForward(nn.Module):
 
     def forward(self, x):
         return self.net(x)
+
 
 class Attention(nn.Module):
     def __init__(self, dim, heads = 8, dim_head = 64, dropout = 0.):
@@ -79,6 +83,7 @@ class Attention(nn.Module):
         out = rearrange(out, 'b h n d -> b n (h d)')
         return self.to_out(out)
 
+
 class Transformer(nn.Module):
     def __init__(self, dim, depth, heads, dim_head, mlp_dim, dropout = 0.):
         super().__init__()
@@ -96,7 +101,8 @@ class Transformer(nn.Module):
             x = ff(x) + x
 
         return self.norm(x)
-    
+
+
 class ViT(nn.Module):
     def __init__(self, *, num_patches, num_frames, dim, depth, heads, mlp_dim, pool='cls', dim_head=64, dropout=0., emb_dropout=0.):
         super().__init__()
@@ -112,11 +118,10 @@ class ViT(nn.Module):
         self.transformer = Transformer(dim, depth, heads, dim_head, mlp_dim, dropout)
         self.pool = pool
 
-    def forward(self, x): # x: (b, window_size * H/patch_size * W/patch_size, 384)
+    def forward(self, x):
+        # (b, window_size * H/patch_size * W/patch_size, 384)
         b, n, _ = x.shape
         x = x + self.pos_embedding[:, :n]
         x = self.dropout(x) 
         x = self.transformer(x) 
         return x
-
-           

@@ -198,11 +198,9 @@ class VQVAE(nn.Module):
 
     def forward(self, input, patch_h, patch_w):
         '''
-            TODO: Reshape before passing
             input: (b, t, num_patches, emb_dim)
         '''
         input = rearrange(input, "b t (h w) e -> (b t) h w e", h=patch_h, w=patch_w)
-        print(input.shape)
 
         if self.quantize:
             quant_b, diff_b, id_b = self.quantize_b(input)

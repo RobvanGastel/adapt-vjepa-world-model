@@ -7,12 +7,13 @@ What does the encoder's latent space look like?
 
 Check out the `Exploration.ipynb` notebook for a more detailed walkthrough of the code and ideas behind it.
 
-Are there benefits to the temporal information it learns versus other encoders such as DINOv2, DINOV3 ...
-- [ ] Compare transition model on latent space predictions of VJEPA2 with DINOv2
-    - [ ] Add a decoder for visualization purposes.
-- [ ] _Compare full setup: transition model (MLP?), Observation model (Frozen VJEPA encoder), MPC (Planning, actions)_
+Are there benefits to the temporal information it learns versus other encoders such as DINOv2, DINOV3.
+- [ ] Compare transition model on latent space predictions of VJEPA2 with DINO
+    - [x] Add a decoder for visualization purposes.
 
-_PCA visualizations_ </br>
+(WIP) Currently, a working next frame and VQ VAE decoder. However, no comparison yet with DINO encoders.
+
+### PCA visualizations </br>
 The V-JEPA2 model takes in two frames merges them to output in the output space as the tubelet size is 2. Give a number of frames of a kitesurfing video below.
 ![](/assets/frames_kitesurfing.png?raw=true)
 
@@ -22,8 +23,11 @@ When passing for example frame 5, and 6 through the encoder we get out the follo
 In this video of a monkey jumping the difference between static and moving objects are more clear. 
 ![](/assets/frames_monkey.png?raw=true)
 
-In the frames below the tree and the fence are clearly not moving, whereas the encoder clearly encodes the movement of the monkey jumping. This model should therefore be a good starting point to finetune a point tracking model.   
+In the frames below the tree and the fence are clearly not moving, whereas the encoder clearly encodes the movement of the monkey jumping. This model should therefore be a good starting point to finetune next frame prediction.   
 ![](/assets/pca_monkey.png?raw=true)
+
+### World Model
+
 
 
 ### References
