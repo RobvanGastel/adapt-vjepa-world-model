@@ -1,13 +1,13 @@
 # Exploring the capabilities of the V-JEPA2 model 
-How does the latent space of V-JEPA2 look like, compared to that of image encoders such as DINOv2, DINOv3, which I explored in earlier repositories.
+How does the latent space of V-JEPA2 look like, compared to that of image encoders such as DINOv2, DINOv3, which I explored in earlier repositories. Also potentially these SSL pre-trained models are ways to train World Models without massive amounts of compute.
 
-What does the encoder's latent space look like?
+Investigate the latent space of the V-JEPA2 model by:
 - [x] PCA without masking.
 - [x] PCA with masking, what will we recover?
 
 Check out the `Exploration.ipynb` notebook for a more detailed walkthrough of the code and ideas behind it.
 
-Are there benefits to the temporal information it learns versus other encoders such as DINOv2, DINOV3.
+Are there benefits to the temporal information it learns versus other encoders such as DINOv2, DINOV3 for predicting next frames and potentially action conditioning.
 - [ ] Compare transition model on latent space predictions of VJEPA2 with DINO
     - [x] Add a decoder for visualization purposes.
 

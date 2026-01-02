@@ -194,7 +194,6 @@ class VQVAE(nn.Module):
             n_res_channel,
             stride=4,
         )
-        self.info = f"in_channel: {in_channel}, channel: {channel}, n_res_block: {n_res_block}, n_res_channel: {n_res_channel}, emb_dim: {emb_dim}, n_embed: {n_embed}, decay: {decay}"
 
     def forward(self, input, patch_h, patch_w):
         '''

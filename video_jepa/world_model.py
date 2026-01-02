@@ -58,7 +58,6 @@ class WorldModel(nn.Module):
         B, C, T, H, W = x.shape
         z = self.encoder(x)
         
-        # TODO: Consider Einops for rearrange
         # (B, frames, patches, embed_dim)
         patch_t = z.shape[1] // (self.patch_w * self.patch_h)
         z = z.reshape(B, patch_t, -1, z.shape[-1])
@@ -73,6 +72,7 @@ class WorldModel(nn.Module):
         z_pred = self.latent_predictor(z_src)
 
         # Decoder, VQVAE
+        # TODO: Currently diff_pred is not useful.
         visual_pred, diff_pred = self.decoder(
             z_tgt,
             self.patch_h,
@@ -82,7 +82,7 @@ class WorldModel(nn.Module):
         # Loss
         # (B, C, num_pred, H, W)
         visual_tgt = x[:, :, self.num_pred * self.tubelet_size :, ...].moveaxis(1, 2)
-        # Reshape to (B, tubelet, num_pred, C, H, W) to average tubelet size
+        # Reshape to (B, tubelet, num_pred, C, H, W) average to fit
         visual_tgt = visual_tgt.view(B, -1, self.num_pred, C, H, W).mean(dim=1)
         visual_pred = visual_pred.view(B, self.num_pred, C, H, W)
 
