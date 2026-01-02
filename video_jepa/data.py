@@ -5,10 +5,11 @@
 # LICENSE file in the root directory of this source tree.
 
 import os
-import cv2
-import numpy as np
+import logging
 
+import cv2
 import torch
+import numpy as np
 
 
 class VideoDataset(torch.utils.data.Dataset):
@@ -17,22 +18,18 @@ class VideoDataset(torch.utils.data.Dataset):
         data_root,
         seq_len=24,
         crop_size=(384, 512),
-        traj_per_sample=768,
+        max_frame_stride=5,
     ):
         super().__init__()
-        
-        np.random.seed(0)
-        torch.manual_seed(0)
-
-        self.data_root = data_root
         self.seq_len = seq_len
-        self.traj_per_sample = traj_per_sample
         self.crop_size = crop_size
+        self.data_root = data_root
+        self.max_frame_stride = max_frame_stride
 
         self.seq_names = [
             f for f in os.listdir(data_root) if os.path.isdir(os.path.join(data_root, f))
         ]
-        print("found %d unique videos in %s" % (len(self.seq_names), self.data_root))
+        logging.info("found %d unique videos in %s" % (len(self.seq_names), self.data_root))
 
     def __getitem__(self, index):
         seq_name = self.seq_names[index]
@@ -41,14 +38,19 @@ class VideoDataset(torch.utils.data.Dataset):
         img_paths = sorted(os.listdir(rgb_path))
         T = len(img_paths)
 
-        # Randomly grab a subsequent chain of images.        
-        if T > self.seq_len:
-            start = np.random.randint(0, T - self.seq_len + 1)
-            img_paths = img_paths[start : start + self.seq_len]
-        else:
-            img_paths = img_paths[:self.seq_len]
+        # Sample the frame rate
+        max_allowed_stride = min(
+            self.max_frame_stride,
+            max(1, (T - 1) // (self.seq_len - 1))
+        )
+        stride = np.random.randint(1, max_allowed_stride + 1)
+        
+        # Get a series of images with given sequence length
+        max_start = T - stride * (self.seq_len - 1)
+        start = np.random.randint(0, max_start)
+        img_paths = img_paths[start : start + stride * self.seq_len : stride]
 
-        # Load the video
+        # Load the video frames
         rgbs = [
             cv2.imread(os.path.join(rgb_path, p))
             for p in img_paths

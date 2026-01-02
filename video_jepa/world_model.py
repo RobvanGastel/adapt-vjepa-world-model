@@ -90,14 +90,6 @@ class WorldModel(nn.Module):
         recon_loss = self.decoder_criterion(visual_pred, visual_tgt)
         decoder_loss = recon_loss + self.latent_loss_weight * diff_pred
 
-        # Debugging logs
-        torch.save(z_pred[0][-1], "z_pred.pt")
-        torch.save(z_tgt[0][-1], "z_tgt.pt")
-
-        cv2.imwrite("tgt.png", visual_tgt[0][-1].moveaxis(0, -1).detach().cpu().numpy() * 255)
-        cv2.imwrite("pred.png", visual_pred[0][-1].moveaxis(0, -1).detach().cpu().numpy() * 255)
-
-
         # Predictor loss
         z_pred = z_pred.reshape(B, self.num_pred, self.patch_w * self.patch_h, self.embed_dim)
         z_loss = self.predictor_criterion(z_pred, z_tgt)
