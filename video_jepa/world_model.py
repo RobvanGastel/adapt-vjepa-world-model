@@ -50,7 +50,8 @@ class WorldModel(nn.Module):
             emb_dim=1024,
             n_res_block=4,
             n_res_channel=128,
-            quantize=False
+            quantize=False,
+            frames_per_latent=2,
         )
         self.decoder_criterion = nn.MSELoss()
     
@@ -76,15 +77,16 @@ class WorldModel(nn.Module):
         visual_pred, diff_pred = self.decoder(
             z_tgt,
             self.patch_h,
-            self.patch_w
+            self.patch_w,
+            frames_per_latent=self.tubelet_size
         )
 
         # Loss
         # (B, C, num_pred, H, W)
         visual_tgt = x[:, :, self.num_pred * self.tubelet_size :, ...].moveaxis(1, 2)
         # Reshape to (B, tubelet, num_pred, C, H, W) average to fit
-        visual_tgt = visual_tgt.view(B, -1, self.num_pred, C, H, W).mean(dim=1)
-        visual_pred = visual_pred.view(B, self.num_pred, C, H, W)
+        visual_tgt = visual_tgt.view(B, self.num_pred * self.tubelet_size, C, H, W)
+        visual_pred = visual_pred.view(B, self.num_pred * self.tubelet_size, C, H, W)
 
         # Decoder loss
         recon_loss = self.decoder_criterion(visual_pred, visual_tgt)

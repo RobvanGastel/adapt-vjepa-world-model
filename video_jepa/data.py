@@ -18,7 +18,7 @@ class VideoDataset(torch.utils.data.Dataset):
         data_root,
         seq_len=24,
         crop_size=(384, 512),
-        max_frame_stride=5,
+        max_frame_stride=10,
     ):
         super().__init__()
         self.seq_len = seq_len

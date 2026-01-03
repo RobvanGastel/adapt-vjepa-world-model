@@ -168,11 +168,13 @@ class VQVAE(nn.Module):
         n_embed=512,
         decay=0.99,
         quantize=True,
+        frames_per_latent=1,
     ):
         super().__init__()
 
         self.quantize = quantize
         self.quantize_b = Quantize(emb_dim, n_embed)
+        self.frames_per_latent = frames_per_latent
 
         if not quantize:
             for param in self.quantize_b.parameters():
@@ -195,10 +197,21 @@ class VQVAE(nn.Module):
             stride=4,
         )
 
-    def forward(self, input, patch_h, patch_w):
+        # Temporal head to expand each latent into multiple per-latent embeddings
+        if self.frames_per_latent > 1:
+            self.temporal_head = nn.Sequential(
+                nn.Conv2d(emb_dim, emb_dim, 3, padding=1),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(emb_dim, emb_dim * self.frames_per_latent, 1),
+            )
+        else:
+            self.temporal_head = None
+
+    def forward(self, input, patch_h, patch_w, frames_per_latent=None):
         '''
             input: (b, t, num_patches, emb_dim)
         '''
+        b, t = input.shape[0], input.shape[1]
         input = rearrange(input, "b t (h w) e -> (b t) h w e", h=patch_h, w=patch_w)
 
         if self.quantize:
@@ -206,9 +219,26 @@ class VQVAE(nn.Module):
         else:
             quant_b, diff_b = input, torch.zeros(1).to(input.device)
 
-        quant_b = quant_b.permute(0, 3, 1, 2)
+        quant_b = quant_b.permute(0, 3, 1, 2)  # (b*t, emb_dim, h, w)
         diff_b = diff_b.unsqueeze(0)
-        dec = self.decode(quant_b)
+
+        frames_per_latent = frames_per_latent or self.frames_per_latent
+
+        if frames_per_latent > 1 and self.temporal_head is not None:
+            tmp = self.temporal_head(quant_b)  # (b*t, emb_dim*fps, h, w)
+            emb_dim = quant_b.shape[1]
+            hq = quant_b.shape[2]
+            wq = quant_b.shape[3]
+            # reshape to (b, t, fps, emb_dim, h, w)
+            tmp = tmp.view(b, t, frames_per_latent, emb_dim, hq, wq)
+            # merge batch, time and frames
+            tmp = tmp.reshape(b * t * frames_per_latent, emb_dim, hq, wq)
+            dec = self.decode(tmp)  # (b*t*fps, C, H, W)
+            dec = dec.view(b, t * frames_per_latent, dec.shape[1], dec.shape[2], dec.shape[3])  # (b, t*fps, C, H, W)
+        else:
+            dec = self.decode(quant_b)  # (b*t, C, H, W)
+            dec = dec.view(b, t, dec.shape[1], dec.shape[2], dec.shape[3])  # (b, t, C, H, W)
+
         return dec, diff_b # diff is 0 if no quantization
 
     def decode(self, quant_b):
