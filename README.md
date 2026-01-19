@@ -8,8 +8,11 @@ Investigate the latent space of the V-JEPA2 model by:
 Check out the `Exploration.ipynb` notebook for a more detailed walkthrough of the code and ideas behind it.
 
 Are there benefits to the temporal information it learns versus other encoders such as DINOv2, DINOV3 for predicting next frames and potentially action conditioning.
-- [ ] Compare transition model on latent space predictions of VJEPA2 with DINO
+- [?] Compare transition model on latent space predictions of VJEPA2 with DINO
     - [x] Add a decoder for visualization purposes.
+- [ ] Generate a better dataset, option for simple RGB frame environment.
+    - [ ] Balancing a pendulum, and secondly include the actions.
+- [ ] Add option for actions with MPC and CEM?
 
 (WIP) Currently, a working next frame and VQ VAE decoder. However, no comparison yet with DINO encoders.
 

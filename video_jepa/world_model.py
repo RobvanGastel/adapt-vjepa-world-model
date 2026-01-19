@@ -42,7 +42,7 @@ class WorldModel(nn.Module):
         )
         self.predictor_criterion = nn.MSELoss()
 
-        # Decoder, initial stage could be PCA
+        # Decoder, same structure as VQVAE
         self.latent_loss_weight = 0.25
         self.decoder = VQVAE(
             channel=384,
@@ -72,9 +72,9 @@ class WorldModel(nn.Module):
         z_src = z_src.reshape(B, -1, z.shape[-1]).detach()
         z_pred = self.latent_predictor(z_src)
 
-        # Decoder, VQVAE
+        # Decoder
         # TODO: Currently diff_pred is not useful.
-        visual_pred, diff_pred = self.decoder(
+        visual_pred, _ = self.decoder(
             z_tgt,
             self.patch_h,
             self.patch_w,
@@ -90,7 +90,7 @@ class WorldModel(nn.Module):
 
         # Decoder loss
         recon_loss = self.decoder_criterion(visual_pred, visual_tgt)
-        decoder_loss = recon_loss + self.latent_loss_weight * diff_pred
+        decoder_loss = recon_loss
 
         # Predictor loss
         z_pred = z_pred.reshape(B, self.num_pred, self.patch_w * self.patch_h, self.embed_dim)

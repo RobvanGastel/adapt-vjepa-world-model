@@ -5,26 +5,32 @@ import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader
 
-from video_jepa.data import VideoDataset
+from video_jepa.data import PendulumDataset
 from video_jepa.world_model import WorldModel
 
 
 def train_world_model(config: argparse.Namespace):
+    logging.info(f"config: {config}")
+
     # Init the VJEPA2 model weights
     video_encoder, _ = torch.hub.load('facebookresearch/vjepa2', 'vjepa2_vit_large')
     for param in video_encoder.parameters():
         param.requires_grad = False
+    video_encoder.eval()
 
-    train_dataset = VideoDataset(
-        config.data_path,
-        crop_size=config.crop_size,
-        seq_len=config.seq_len
+    train_dataset = PendulumDataset(
+        seq_len=config.seq_len,
+        input_size=config.crop_size,
+        include_states=False,
+        include_actions=False,
     )
     train_loader = DataLoader(
         train_dataset,
         batch_size=config.batch_size,
-        num_workers=4,
+        num_workers=6,
         persistent_workers=True,
+        prefetch_factor=2,
+        pin_memory=True,
         shuffle=True,
     )
 
@@ -36,7 +42,6 @@ def train_world_model(config: argparse.Namespace):
     ).cuda()
 
     predictor_opt = optim.AdamW(model.latent_predictor.parameters(), lr=1e-3)
-    # encoder_opt  = optim.AdamW(model.encoder.parameters(), lr=1e-5)
     decoder_opt = optim.AdamW(model.decoder.parameters(), lr=3e-4)
 
     for epoch in range(config.epochs):
@@ -46,15 +51,13 @@ def train_world_model(config: argparse.Namespace):
 
             predictor_opt.zero_grad()
             decoder_opt.zero_grad()
-            # encoder_opt.zero_grad()
 
             (z_loss + decoder_loss).backward()
 
-            # encoder_opt.step()
             predictor_opt.step()
             decoder_opt.step()
 
-        if epoch % 5 == 0:
+        if epoch % 1 == 0:
             torch.save(model.latent_predictor.state_dict(), f"output/latent_predictor.pt")
             torch.save(model.decoder.state_dict(), f"output/decoder.pt")
             logging.info(
@@ -74,7 +77,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--batch_size",
         type=int,
-        default=12,
+        default=128,
         help="Finetuning batch size",
     )
     parser.add_argument(
@@ -86,7 +89,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--crop_size",
         type=tuple,
-        default=(384, 384),
+        default=(128, 128),
         help="Size (H, W) of the video frames"
     )
     parser.add_argument(
