@@ -22,7 +22,7 @@ def train_world_model(config: argparse.Namespace):
         seq_len=config.seq_len,
         input_size=config.crop_size,
         include_states=False,
-        include_actions=False,
+        include_actions=True,
     )
     train_loader = DataLoader(
         train_dataset,
@@ -47,7 +47,8 @@ def train_world_model(config: argparse.Namespace):
     for epoch in range(config.epochs):
         for batch in train_loader:
             video = batch["video"].moveaxis(1, 2).cuda()
-            z_loss, decoder_loss = model(video)
+            actions = batch["actions"].cuda()
+            z_loss, decoder_loss = model(video, actions)
 
             predictor_opt.zero_grad()
             decoder_opt.zero_grad()
@@ -77,13 +78,13 @@ if __name__ == "__main__":
     parser.add_argument(
         "--batch_size",
         type=int,
-        default=128,
+        default=64,
         help="Finetuning batch size",
     )
     parser.add_argument(
         "--epochs",
         type=int,
-        default=500,
+        default=600,
         help="Number of training epochs",
     )
     parser.add_argument(

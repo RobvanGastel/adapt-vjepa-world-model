@@ -33,7 +33,8 @@ class PendulumDataset(torch.utils.data.Dataset):
         frames, states, actions = [], [], []
         
         for _ in range(self.seq_len):
-            action = np.array([0.0])  # Free swing (or sample random actions)
+            # action = np.array([0.0])  # Free swing (or sample random actions)
+            action = env.action_space.sample()
             next_state, _, terminated, truncated, _ = env.step(action)
             
             # Render and resize frame
