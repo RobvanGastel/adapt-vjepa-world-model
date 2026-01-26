@@ -1,5 +1,3 @@
-from typing import Optional
-
 import torch
 import torch.nn as nn
 from einops import repeat
@@ -16,13 +14,15 @@ class WorldModel(nn.Module):
             num_pred : int,
             video_encoder : nn.Module,
             input_size : tuple[int, int],
+            action_dim : int,
+            action_embed_dim : int
     ):
         super().__init__()
         # Experiment settings
         self.num_hist = num_hist
         self.num_pred = num_pred
-
-        # TODO: When .eval()?
+        self.action_dim = action_dim
+        self.action_embed_dim = action_embed_dim
 
         # Encoder, Video JEPA 
         self.encoder = video_encoder
@@ -34,21 +34,17 @@ class WorldModel(nn.Module):
         self.patch_w = input_size[1] // self.patch_size
 
         # Action encoder
-        # TODO: Pass
-        self.action_dim = 1
-        self.action_emb_dim = 96
         self.action_encoder = ProprioceptiveEmbedding(
             tubelet_size=self.tubelet_size,
             in_chans=self.action_dim,
-            emb_dim=self.action_emb_dim
+            emb_dim=self.action_embed_dim
         )
-        self.encoder_criterion = nn.MSELoss()
 
         # Latent predictor
         self.latent_predictor = ViT(
             num_patches=self.patch_h * self.patch_w,
             num_frames=self.num_hist,
-            dim=self.embed_dim + self.action_emb_dim,
+            dim=self.embed_dim + self.action_embed_dim,
             depth=6,
             heads=16,
             mlp_dim=2048,
@@ -67,11 +63,11 @@ class WorldModel(nn.Module):
             n_res_block=4,
             n_res_channel=128,
             quantize=False,
-            frames_per_latent=2,
+            frames_per_latent=self.tubelet_size,
         )
         self.decoder_criterion = nn.MSELoss()
     
-    def forward(self, x : torch.Tensor, action : Optional[torch.Tensor | None]):
+    def forward(self, x : torch.Tensor, action : torch.Tensor):
         B, C, T, H, W = x.shape
         z = self.encoder(x)
 
@@ -84,7 +80,7 @@ class WorldModel(nn.Module):
         z_tgt = z[:, self.num_pred :, :, :]
 
         # Action encoder
-        # (B, frames, action_emb_dim)
+        # (B, frames, action_embed_dim)
         z_act = self.action_encoder(action)
         z_act = z_act[:, : self.num_hist].unsqueeze(2)
         act_tiled = repeat(
@@ -98,7 +94,7 @@ class WorldModel(nn.Module):
         z_src = torch.cat([z_src, act_tiled], dim=3)
 
         # (B * frames * num_patches, dim)
-        z_src = z_src.reshape(B, -1, z.shape[-1] + 96).detach()
+        z_src = z_src.reshape(B, -1, z.shape[-1] + self.action_embed_dim).detach()
         z_pred = self.latent_predictor(z_src)
 
         # Decoder
@@ -118,7 +114,12 @@ class WorldModel(nn.Module):
         decoder_loss = self.decoder_criterion(visual_pred, x.moveaxis(1, 2))
 
         # Predictor loss
-        z_pred = z_pred.reshape(B, self.num_pred, self.patch_w * self.patch_h, self.embed_dim + 96)
-        z_pred = z_pred[..., :-96]
+        z_pred = z_pred.reshape(
+            B,
+            self.num_pred,
+            self.patch_w * self.patch_h,
+            self.embed_dim + self.action_embed_dim
+        )
+        z_pred = z_pred[..., :-self.action_embed_dim]
         z_loss = self.predictor_criterion(z_pred, z_tgt)
         return z_loss, decoder_loss

@@ -38,11 +38,14 @@ def train_world_model(config: argparse.Namespace):
         num_hist=config.pred_n_frames,
         num_pred=config.pred_n_frames,
         video_encoder=video_encoder,
-        input_size=config.crop_size
+        input_size=config.crop_size,
+        action_dim=1,
+        action_embed_dim=config.action_embed_dim,
     ).cuda()
 
-    predictor_opt = optim.AdamW(model.latent_predictor.parameters(), lr=1e-3)
-    decoder_opt = optim.AdamW(model.decoder.parameters(), lr=3e-4)
+    predictor_opt = optim.AdamW(model.latent_predictor.parameters(), lr=config.pred_lr)
+    action_opt = optim.AdamW(model.action_encoder.parameters(), lr=config.lr)
+    decoder_opt = optim.AdamW(model.decoder.parameters(), lr=config.lr)
 
     for epoch in range(config.epochs):
         for batch in train_loader:
@@ -52,15 +55,18 @@ def train_world_model(config: argparse.Namespace):
 
             predictor_opt.zero_grad()
             decoder_opt.zero_grad()
+            action_opt.zero_grad()
 
             (z_loss + decoder_loss).backward()
 
             predictor_opt.step()
             decoder_opt.step()
+            action_opt.step()
 
         if epoch % 1 == 0:
             torch.save(model.latent_predictor.state_dict(), f"output/latent_predictor.pt")
             torch.save(model.decoder.state_dict(), f"output/decoder.pt")
+            torch.save(model.action_encoder.state_dict(), f"output/action_emb.pt")
             logging.info(
                 f"Epoch: {epoch} - predictor loss: {z_loss.item()} - "
                 f"decoder loss: {decoder_loss.item()}"
@@ -69,12 +75,6 @@ def train_world_model(config: argparse.Namespace):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Experiment Configuration")
-    parser.add_argument(
-        "--data_path",
-        type=str,
-        default="./data",
-        help="Dataset path"
-    )
     parser.add_argument(
         "--batch_size",
         type=int,
@@ -104,6 +104,24 @@ if __name__ == "__main__":
         type=int, 
         default=3,
         help="N frames to predict, and context"
+    )
+    parser.add_argument(
+        "--pred_lr",
+        type=float,
+        default=1e-3,
+        help="Latent predictor adamW learning rate"
+    )
+    parser.add_argument(
+        "--lr",
+        type=float,
+        default=3e-4,
+        help="Decoder, action embedding adamW learning rate"
+    )
+    parser.add_argument(
+        "--action_embed_dim",
+        type=int,
+        default=96,
+        help="The action embedding dimension size"
     )
     config = parser.parse_args()
     
