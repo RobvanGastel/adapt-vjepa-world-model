@@ -2,9 +2,7 @@ import torch
 import torch.nn as nn
 from einops import repeat
 
-from video_jepa.latent_decoder import VQVAE
-from video_jepa.latent_predictor import ViT
-from video_jepa.proprio_encoder import ProprioceptiveEmbedding 
+from video_jepa.model import VQVAE, ViT, ProprioceptiveEmbedding 
 
 
 class WorldModel(nn.Module):
@@ -83,7 +81,7 @@ class WorldModel(nn.Module):
         # (B, frames, action_embed_dim)
         z_act = self.action_encoder(action)
         z_act = z_act[:, : self.num_hist].unsqueeze(2)
-        act_tiled = repeat(
+        z_act_tiled = repeat(
             z_act,
             "b t 1 a -> b t f a",
             f=z_tgt.shape[2]
@@ -91,7 +89,7 @@ class WorldModel(nn.Module):
 
         # Latent Predictor, ViT
         # (B, num_pred, num_patches, 2)
-        z_src = torch.cat([z_src, act_tiled], dim=3)
+        z_src = torch.cat([z_src, z_act_tiled], dim=3)
 
         # (B * frames * num_patches, dim)
         z_src = z_src.reshape(B, -1, z.shape[-1] + self.action_embed_dim).detach()
@@ -123,3 +121,34 @@ class WorldModel(nn.Module):
         z_pred = z_pred[..., :-self.action_embed_dim]
         z_loss = self.predictor_criterion(z_pred, z_tgt)
         return z_loss, decoder_loss
+    
+    def encode_obs(self, x : torch.Tensor):
+        B, C, T, H, W = x.shape
+        z = self.encoder(x)
+        return z.reshape(B, -1, self.patch_h * self.patch_w, self.embed_dim)
+
+    def rollout(self, x : torch.Tensor, action : torch.Tensor):
+        B, C, T, H, W = x.shape
+        z = self.encoder(x)
+        z_hist = z.reshape(B, -1, self.patch_h * self.patch_w, self.embed_dim)
+
+        # (B, T_plan, 1)
+        B, T_plan, _ = action.shape
+        z_act = self.action_encoder(action)
+        z_act = z_act[:, : self.num_hist].unsqueeze(2)
+        z_act_tiled = repeat(
+            z_act,
+            "b t 1 a -> b t f a",
+            f=self.patch_h * self.patch_w
+        )
+
+        z_src = z_hist[:, :self.num_hist] # TODO: process first?
+        
+        combined = torch.cat([z_src, z_act_tiled], dim=-1)
+        combined_flat = combined.reshape(B, -1, self.embed_dim + self.action_embed_dim)
+        
+        z_pred = self.latent_predictor(combined_flat)
+
+        z_pred = z_pred.reshape(B, T_plan, -1, self.embed_dim + self.action_embed_dim)
+        z_pred = z_pred[..., :-self.action_embed_dim]
+        return z_pred

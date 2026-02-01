@@ -1,5 +1,6 @@
 import torch
 
+
 def pca(X : torch.Tensor, n_components : int = 3) -> torch.Tensor:
     Z_mean = X.mean(0, keepdim=True)
     Z = X - Z_mean
@@ -12,12 +13,13 @@ def pca(X : torch.Tensor, n_components : int = 3) -> torch.Tensor:
     Z = torch.matmul(Z, VT[:n_components].T)
     return Z
 
+
 def min_max(
         X : torch.Tensor,
         target_min : float = 0.0,
-        target_max : float = 1.0
+        target_max : float = 1.0,
+        eps : float = 1e-8
     ) -> torch.Tensor:
-    eps = 1e-8
     X_std = (X - X.min(0, True).values) / (X.max(0, True).values - X.min(0, True).values + eps)
     X_scaled = X_std * (target_max - target_min) + target_min
     return X_scaled
