@@ -20,6 +20,7 @@ class WorldModel(nn.Module):
         self.num_hist = num_hist
         self.num_pred = num_pred
         self.action_dim = action_dim
+        self.input_size = input_size
         self.action_embed_dim = action_embed_dim
 
         # Encoder, Video JEPA 
@@ -127,28 +128,50 @@ class WorldModel(nn.Module):
         z = self.encoder(x)
         return z.reshape(B, -1, self.patch_h * self.patch_w, self.embed_dim)
 
-    def rollout(self, x : torch.Tensor, action : torch.Tensor):
-        B, C, T, H, W = x.shape
-        z = self.encoder(x)
-        z_hist = z.reshape(B, -1, self.patch_h * self.patch_w, self.embed_dim)
-
-        # (B, T_plan, 1)
-        B, T_plan, _ = action.shape
-        z_act = self.action_encoder(action)
-        z_act = z_act[:, : self.num_hist].unsqueeze(2)
-        z_act_tiled = repeat(
-            z_act,
-            "b t 1 a -> b t f a",
-            f=self.patch_h * self.patch_w
-        )
-
-        z_src = z_hist[:, :self.num_hist] # TODO: process first?
+    @torch.no_grad()
+    def rollout(self, src_obs, src_act, actions):
+        """
+        src_obs : [B, C, K, H, W]
+        src_act : [B, K, A]
+        actions : [B, H, A], CEM samples.
+        """
+        B = actions.shape[0]
+        H = actions.shape[1]
+        K = src_obs.shape[2]
+        P = self.patch_h * self.patch_w
         
-        combined = torch.cat([z_src, z_act_tiled], dim=-1)
-        combined_flat = combined.reshape(B, -1, self.embed_dim + self.action_embed_dim)
-        
-        z_pred = self.latent_predictor(combined_flat)
+        # Expand context
+        src_obs = src_obs.expand(B, -1, -1, -1, -1) # [B, C, K, H, W]
+        src_act = src_act.expand(B, -1, -1) # [B, K, A]
 
-        z_pred = z_pred.reshape(B, T_plan, -1, self.embed_dim + self.action_embed_dim)
-        z_pred = z_pred[..., :-self.action_embed_dim]
-        return z_pred
+        # Encode the observations
+        z = self.encoder(src_obs.float())
+        vid_feats = z.reshape(B, K // self.tubelet_size, P, self.embed_dim)
+
+        # Combine the planned CEM actions
+        stacked_act = torch.cat([src_act, actions], dim=1)
+        
+        for h in range(H // self.tubelet_size):
+            # Keep adding video_features always take the last 3 frames
+            z_ctx = vid_feats[:, -self.num_hist:]
+            curr_ctxt_len = z_ctx.shape[1]
+
+            # Select the actions for planning
+            end_frame_idx = (self.num_hist + h) * 2
+            start_frame_idx = end_frame_idx - (curr_ctxt_len * 2)
+            act_slice = stacked_act[:, start_frame_idx : end_frame_idx]
+            z_act = self.action_encoder(act_slice).unsqueeze(2).repeat(1, 1, P, 1)
+
+            combined = torch.cat([z_ctx, z_act], dim=-1)
+            combined = combined.reshape(B, -1, self.embed_dim + self.action_embed_dim)
+
+            # Predict future steps
+            z_next = self.latent_predictor(combined)
+            # TODO: Or [:, -1:], double check latent prediction order
+            z_next = z_next.reshape(B, 3, P, -1)[:, 0:1]
+            z_next = z_next[..., :-self.action_embed_dim]
+
+            vid_feats = torch.cat([vid_feats, z_next], dim=1)
+
+        vid_feats = vid_feats.reshape(B, -1, self.patch_h, self.patch_w, self.embed_dim) 
+        return vid_feats

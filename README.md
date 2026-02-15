@@ -10,11 +10,12 @@ Check out the `Exploration.ipynb` notebook for a more detailed walkthrough of th
 Are there benefits to the temporal information it learns versus other encoders such as DINOv2, DINOV3 for predicting next frames and potentially action conditioning.
 - [?] Compare transition model on latent space predictions of VJEPA2 with DINO
     - [x] Add a decoder for visualization purposes.
-- [ ] Generate a better dataset, option for simple RGB frame environment.
-    - [ ] Balancing a pendulum, and secondly include the actions.
-- [ ] Add option for actions with MPC and CEM?
+- [x] Generate a better dataset, option for simple RGB frame environment.
+    - [x] Balancing a pendulum, and secondly include the actions.
+    - [ ] Continuous action space might not be a best first try ...
+- [x] Add option for actions with MPC and CEM?
 
-(WIP) Currently, a working next frame and VQ VAE decoder. However, no comparison yet with DINO encoders.
+(WIP) All steps are implemented, however I need some more tuning to get the MPC with CEM to work.
 
 ### PCA visualizations </br>
 The V-JEPA2 model takes in two frames merges them to output in the output space as the tubelet size is 2. Give a number of frames of a kitesurfing video below.
@@ -23,15 +24,18 @@ The V-JEPA2 model takes in two frames merges them to output in the output space 
 When passing for example frame 5, and 6 through the encoder we get out the following latent features when processing them with PCA for visualization purposes. The encoder clearly seperates the kites in both frames.
 ![](/assets/pca_kitesurfing.png?raw=true)
 
-In this video of a monkey jumping the difference between static and moving objects are more clear. 
+<!-- In this video of a monkey jumping the difference between static and moving objects are more clear. 
 ![](/assets/frames_monkey.png?raw=true)
 
 In the frames below the tree and the fence are clearly not moving, whereas the encoder clearly encodes the movement of the monkey jumping. This model should therefore be a good starting point to finetune next frame prediction.   
-![](/assets/pca_monkey.png?raw=true)
+![](/assets/pca_monkey.png?raw=true) -->
 
 ### World Model
+These are the outputs of training the future latent state predictor and decoder on top of the Pendulum environment. As you can see it predicts the first 3 states pretty accurately.
+![](/assets/future_state_predictions.png?raw=true)
 
-
+As for the latent state comparison between the predictor and the encoder. These are also comparable.
+![](/assets/predictor_latent_space.png?raw=true)
 
 ### References
 Assran, M., Bardes, A., Fan, D., Garrido, Q., Howes, R., Mojtaba, Komeili, Muckley, M., Rizvi, A., Roberts, C., Sinha, K., Zholus, A., Arnaud, S., Gejji, A., Martin, A., Hogan, F. R., Dugas, D., Bojanowski, P., Khalidov, V., … Ballas, N. (2025). V-JEPA 2: Self-Supervised Video Models Enable Understanding, Prediction and Planning (No. arXiv:2506.09985). arXiv. https://doi.org/10.48550/arXiv.2506.09985
