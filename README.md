@@ -7,15 +7,28 @@ Investigate the latent space of the V-JEPA2 model by:
 
 Check out the `Exploration.ipynb` notebook for a more detailed walkthrough of the code and ideas behind it.
 
-Are there benefits to the temporal information it learns versus other encoders such as DINOv2, DINOV3 for predicting next frames and potentially action conditioning.
-- [?] Compare transition model on latent space predictions of VJEPA2 with DINO
+- [x] Compare transition model on latent space predictions of VJEPA2 with DINO. Currently, skipping other encoders.
     - [x] Add a decoder for visualization purposes.
 - [x] Generate a better dataset, option for simple RGB frame environment.
     - [x] Balancing a pendulum, and secondly include the actions.
-    - [ ] Continuous action space might not be a best first try ...
+    - ~~Continuous action space might not be a best first try ...~~
 - [x] Add option for actions with MPC and CEM?
 
-(WIP) All steps are implemented, however I need some more tuning to get the MPC with CEM to work.
+Check out the `World Model.ipynb` notebook to test the planning of the model.
+
+## Setup
+Install the packages using the `requirements.txt` file.
+
+```bash
+# using conda
+conda create --name jepa python=3.11
+conda activate jepa
+
+# Run the training code, adjust the argparse flags
+python train_world_model.py
+# Test the planning of the model on the pendulum environment
+python test_planning.py
+```
 
 ### PCA visualizations </br>
 The V-JEPA2 model takes in two frames merges them to output in the output space as the tubelet size is 2. Give a number of frames of a kitesurfing video below.
@@ -36,6 +49,7 @@ These are the outputs of training the future latent state predictor and decoder 
 
 As for the latent state comparison between the predictor and the encoder. These are also comparable.
 ![](/assets/predictor_latent_space.png?raw=true)
+
 
 ### References
 Assran, M., Bardes, A., Fan, D., Garrido, Q., Howes, R., Mojtaba, Komeili, Muckley, M., Rizvi, A., Roberts, C., Sinha, K., Zholus, A., Arnaud, S., Gejji, A., Martin, A., Hogan, F. R., Dugas, D., Bojanowski, P., Khalidov, V., … Ballas, N. (2025). V-JEPA 2: Self-Supervised Video Models Enable Understanding, Prediction and Planning (No. arXiv:2506.09985). arXiv. https://doi.org/10.48550/arXiv.2506.09985

@@ -181,12 +181,7 @@ class VQVAE(nn.Module):
                 param.requires_grad = False
 
         self.upsample_b = Decoder(
-            emb_dim,
-            emb_dim,
-            channel,
-            n_res_block,
-            n_res_channel,
-            stride=4
+            emb_dim, emb_dim, channel, n_res_block, n_res_channel, stride=4
         )
         self.dec = Decoder(
             emb_dim,
@@ -208,9 +203,9 @@ class VQVAE(nn.Module):
             self.temporal_head = None
 
     def forward(self, input, patch_h, patch_w, frames_per_latent=None):
-        '''
-            input: (b, t, num_patches, emb_dim)
-        '''
+        """
+        input: (b, t, num_patches, emb_dim)
+        """
         b, t = input.shape[0], input.shape[1]
         input = rearrange(input, "b t (h w) e -> (b t) h w e", h=patch_h, w=patch_w)
 
@@ -234,14 +229,18 @@ class VQVAE(nn.Module):
             # merge batch, time and frames
             tmp = tmp.reshape(b * t * frames_per_latent, emb_dim, hq, wq)
             dec = self.decode(tmp)  # (b*t*fps, C, H, W)
-            dec = dec.view(b, t * frames_per_latent, dec.shape[1], dec.shape[2], dec.shape[3])  # (b, t*fps, C, H, W)
+            dec = dec.view(
+                b, t * frames_per_latent, dec.shape[1], dec.shape[2], dec.shape[3]
+            )  # (b, t*fps, C, H, W)
         else:
             dec = self.decode(quant_b)  # (b*t, C, H, W)
-            dec = dec.view(b, t, dec.shape[1], dec.shape[2], dec.shape[3])  # (b, t, C, H, W)
+            dec = dec.view(
+                b, t, dec.shape[1], dec.shape[2], dec.shape[3]
+            )  # (b, t, C, H, W)
 
-        return dec, diff_b # diff is 0 if no quantization
+        return dec, diff_b  # diff is 0 if no quantization
 
     def decode(self, quant_b):
-        upsample_b = self.upsample_b(quant_b) 
-        dec = self.dec(upsample_b) # quant: (128, 64, 64)
+        upsample_b = self.upsample_b(quant_b)
+        dec = self.dec(upsample_b)  # quant: (128, 64, 64)
         return dec

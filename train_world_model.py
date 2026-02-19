@@ -13,7 +13,7 @@ def train_world_model(config: argparse.Namespace):
     logging.info(f"config: {config}")
 
     # Init the VJEPA2 model weights
-    video_encoder, _ = torch.hub.load('facebookresearch/vjepa2', 'vjepa2_vit_large')
+    video_encoder, _ = torch.hub.load("facebookresearch/vjepa2", "vjepa2_vit_large")
     for param in video_encoder.parameters():
         param.requires_grad = False
     video_encoder.eval()
@@ -64,7 +64,9 @@ def train_world_model(config: argparse.Namespace):
             action_opt.step()
 
         if epoch % 1 == 0:
-            torch.save(model.latent_predictor.state_dict(), f"output/latent_predictor.pt")
+            torch.save(
+                model.latent_predictor.state_dict(), f"output/latent_predictor.pt"
+            )
             torch.save(model.decoder.state_dict(), f"output/decoder.pt")
             torch.save(model.action_encoder.state_dict(), f"output/action_emb.pt")
             logging.info(
@@ -91,39 +93,41 @@ if __name__ == "__main__":
         "--crop_size",
         type=tuple,
         default=(128, 128),
-        help="Size (H, W) of the video frames"
+        help="Size (H, W) of the video frames",
     )
     parser.add_argument(
         "--seq_len",
         type=int,
         default=12,
-        help="Sequence length T of the video"
+        help="Sequence length T of the video",
     )
     parser.add_argument(
         "--pred_n_frames",
-        type=int, 
+        type=int,
         default=3,
-        help="N frames to predict, and context"
+        help="N frames to predict, and context",
     )
     parser.add_argument(
         "--pred_lr",
         type=float,
         default=1e-3,
-        help="Latent predictor adamW learning rate"
+        help="Latent predictor adamW learning rate",
     )
     parser.add_argument(
         "--lr",
         type=float,
         default=3e-4,
-        help="Decoder, action embedding adamW learning rate"
+        help="Decoder, action embedding adamW learning rate",
     )
     parser.add_argument(
         "--action_embed_dim",
         type=int,
         default=96,
-        help="The action embedding dimension size"
+        help="The action embedding dimension size",
     )
     config = parser.parse_args()
-    
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+    )
     train_world_model(config)
