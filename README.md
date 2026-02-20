@@ -11,10 +11,9 @@ Check out the `Exploration.ipynb` notebook for a more detailed walkthrough of th
     - [x] Add a decoder for visualization purposes.
 - [x] Generate a better dataset, option for simple RGB frame environment.
     - [x] Balancing a pendulum, and secondly include the actions.
-    - ~~Continuous action space might not be a best first try ...~~
-- [x] Add option for actions with MPC and CEM?
+- [x] Add option for actions with MPC and CEM.
 
-Check out the `World Model.ipynb` notebook to test the planning of the model.
+Check out the `World Model.ipynb` notebook to test the planning of the model. However, the continuous action space is a lot more difficult than the original paper with discrete action space.
 
 ## Setup
 Install the packages using the `requirements.txt` file.
@@ -29,6 +28,12 @@ python train_world_model.py
 # Test the planning of the model on the pendulum environment
 python test_planning.py
 ```
+
+## Model Weights
+
+The model is split into components, the [action embedding network](https://drive.google.com/file/d/1VzL1d_D9b4Laix5NA0NgIYh2D6YzsJDI/view), [ViT latent predictor](https://drive.google.com/file/d/1JdZ5Qg7V3f8oZqtlYF1JJPsKLNz-jRgl/view) for future state prediction, and the [decoder](https://drive.google.com/file/d/1VYO7AEgwW8DteAj_GQgQ-oEAjK7BpRFj/view) for visualizing the latents.
+
+Finally, put these into the output folder so the networks can easily be loaded back in.
 
 ### PCA visualizations </br>
 The V-JEPA2 model takes in two frames merges them to output in the output space as the tubelet size is 2. Give a number of frames of a kitesurfing video below.

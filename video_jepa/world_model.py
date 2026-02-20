@@ -145,8 +145,8 @@ class WorldModel(nn.Module):
             curr_ctxt_len = z_ctx.shape[1]
 
             # Select the actions for planning
-            end_frame_idx = (self.num_hist + h) * 2
-            start_frame_idx = end_frame_idx - (curr_ctxt_len * 2)
+            end_frame_idx = (self.num_hist + h) * self.tubelet_size
+            start_frame_idx = end_frame_idx - (curr_ctxt_len * self.tubelet_size)
             act_slice = stacked_act[:, start_frame_idx:end_frame_idx]
             z_act = self.action_encoder(act_slice).unsqueeze(2).repeat(1, 1, P, 1)
 
@@ -161,5 +161,7 @@ class WorldModel(nn.Module):
 
             vid_feats = torch.cat([vid_feats, z_next], dim=1)
 
+        # Remove historic predictions
+        vid_feats = vid_feats[:, K // self.tubelet_size :]
         vid_feats = vid_feats.reshape(B, -1, self.patch_h, self.patch_w, self.embed_dim)
         return vid_feats
