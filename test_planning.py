@@ -59,7 +59,6 @@ def train_world_model(config: argparse.Namespace):
         action_embed_dim=config.action_embed_dim,
     )
 
-    # TODO: Move to parameters
     planner = CEM(
         wm=model,
         horizon=config.horizon,

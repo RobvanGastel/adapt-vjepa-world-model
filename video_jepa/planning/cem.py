@@ -19,7 +19,7 @@ class CEM:
         self.var_scale = var_scale
         self.num_samples = num_samples
 
-        self.action_dim = wm.action_dim
+        self.act_dim = wm.action_dim
         self.device = next(wm.parameters()).device
 
     @torch.inference_mode()
@@ -29,30 +29,27 @@ class CEM:
         src_act: torch.Tensor,
         z_g: torch.Tensor,
         alpha: float = 1.0,
+        return_features: bool = False,
     ):
 
         # Shape: (H, action_dim)
-        mu = torch.zeros((self.horizon, self.action_dim), device=self.device)
+        mu = torch.zeros((self.horizon, self.act_dim), device=self.device)
         sigma = (
-            torch.ones((self.horizon, self.action_dim), device=self.device)
+            torch.ones((self.horizon, self.act_dim), device=self.device)
             * self.var_scale
         )
 
         for _ in range(self.opt_steps):
             # Sample action sequences
             eps = torch.randn(
-                (self.num_samples, self.horizon, self.action_dim), device=self.device
+                (self.num_samples, self.horizon, self.act_dim), device=self.device
             )
             actions = mu + sigma * eps
-
             actions[0] = mu
 
-            z_obs = self.wm.rollout(src_obs, src_act, actions)
+            z_y_hat = self.wm.rollout(src_obs, src_act, actions)
 
-            z_y_hat = z_obs[:, -1]
-            z_y = z_g[:, -1]
-
-            dists = torch.mean((z_y_hat - z_y) ** 2, dim=(1, 2, 3))
+            dists = torch.mean((z_y_hat[:, -1] - z_g[:, -1]) ** 2, dim=(1, 2, 3))
             _, indices = torch.topk(dists, self.topk, largest=False)
             elites = actions[indices]
 
@@ -61,4 +58,8 @@ class CEM:
 
             mu = alpha * new_mu + (1 - alpha) * mu
             sigma = alpha * new_sigma + (1 - alpha) * sigma + 1e-6
-        return mu[0]
+
+        if return_features:
+            return mu[0], z_y_hat[0]
+        else:
+            return mu[0]

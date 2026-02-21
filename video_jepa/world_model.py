@@ -155,7 +155,6 @@ class WorldModel(nn.Module):
 
             # Predict future steps
             z_next = self.latent_predictor(combined)
-            # TODO: Or [:, -1:], double check latent prediction order
             z_next = z_next.reshape(B, 3, P, -1)[:, 0:1]
             z_next = z_next[..., : -self.action_embed_dim]
 
