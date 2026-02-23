@@ -1,8 +1,8 @@
 numpy
 pyyaml
+timm
 einops==0.8.1
 gymnasium
-torchvision==0.24.1
-ImageIO==2.37.2
+imageio==2.37.2
 pillow==12.1.0
 matplotlib==3.10.8

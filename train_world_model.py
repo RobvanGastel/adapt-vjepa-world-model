@@ -18,8 +18,9 @@ def train_world_model(config: argparse.Namespace):
         param.requires_grad = False
     video_encoder.eval()
 
+    seq_len = (config.hist_n_frames + config.pred_n_frames) * 2
     train_dataset = PendulumDataset(
-        seq_len=config.seq_len,
+        seq_len=seq_len,  # length of historic plus future frame predictions
         input_size=config.crop_size,
         include_states=False,
         include_actions=True,
@@ -35,17 +36,22 @@ def train_world_model(config: argparse.Namespace):
     )
 
     model = WorldModel(
-        num_hist=config.pred_n_frames,
+        num_hist=config.hist_n_frames,
         num_pred=config.pred_n_frames,
         video_encoder=video_encoder,
         input_size=config.crop_size,
         action_dim=1,
-        action_embed_dim=config.action_embed_dim,
+        normalize_latents=True,  # Probably necessary to compare structure
     ).cuda()
 
-    predictor_opt = optim.AdamW(model.latent_predictor.parameters(), lr=config.pred_lr)
-    action_opt = optim.AdamW(model.action_encoder.parameters(), lr=config.lr)
-    decoder_opt = optim.AdamW(model.decoder.parameters(), lr=config.lr)
+    optimizer = optim.AdamW(
+        [
+            {"params": model.latent_predictor.parameters(), "lr": config.pred_lr},
+            {"params": model.action_encoder.parameters(), "lr": config.lr},
+            {"params": model.decoder.parameters(), "lr": config.lr},
+        ]
+    )
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config.epochs)
 
     for epoch in range(config.epochs):
         for batch in train_loader:
@@ -53,22 +59,19 @@ def train_world_model(config: argparse.Namespace):
             actions = batch["actions"].cuda()
             z_loss, decoder_loss = model(video, actions)
 
-            predictor_opt.zero_grad()
-            decoder_opt.zero_grad()
-            action_opt.zero_grad()
+            optimizer.zero_grad()
 
             (z_loss + decoder_loss).backward()
 
-            predictor_opt.step()
-            decoder_opt.step()
-            action_opt.step()
+            optimizer.step()
+        scheduler.step()
 
         if epoch % 1 == 0:
-            torch.save(
-                model.latent_predictor.state_dict(), f"output/latent_predictor.pt"
-            )
-            torch.save(model.decoder.state_dict(), f"output/decoder.pt")
-            torch.save(model.action_encoder.state_dict(), f"output/action_emb.pt")
+            latent_param = model.latent_predictor.state_dict()
+            torch.save(latent_param, f"output/latent_predictor1.pt")
+            torch.save(model.action_encoder.state_dict(), f"output/action_emb1.pt")
+            torch.save(model.decoder.state_dict(), f"output/decoder1.pt")
+
             logging.info(
                 f"Epoch: {epoch} - predictor loss: {z_loss.item()} - "
                 f"decoder loss: {decoder_loss.item()}"
@@ -80,13 +83,13 @@ if __name__ == "__main__":
     parser.add_argument(
         "--batch_size",
         type=int,
-        default=64,
+        default=96,
         help="Finetuning batch size",
     )
     parser.add_argument(
         "--epochs",
         type=int,
-        default=600,
+        default=900,
         help="Number of training epochs",
     )
     parser.add_argument(
@@ -96,21 +99,21 @@ if __name__ == "__main__":
         help="Size (H, W) of the video frames",
     )
     parser.add_argument(
-        "--seq_len",
+        "--hist_n_frames",
         type=int,
-        default=12,
-        help="Sequence length T of the video",
+        default=3,
+        help="N frames to predict (divided by tubelet size 2)",
     )
     parser.add_argument(
         "--pred_n_frames",
         type=int,
-        default=3,
-        help="N frames to predict, and context",
+        default=1,
+        help="N context frames (divided by tubelet size 2)",
     )
     parser.add_argument(
         "--pred_lr",
         type=float,
-        default=1e-3,
+        default=5e-4,
         help="Latent predictor adamW learning rate",
     )
     parser.add_argument(
@@ -118,12 +121,6 @@ if __name__ == "__main__":
         type=float,
         default=3e-4,
         help="Decoder, action embedding adamW learning rate",
-    )
-    parser.add_argument(
-        "--action_embed_dim",
-        type=int,
-        default=96,
-        help="The action embedding dimension size",
     )
     config = parser.parse_args()
 

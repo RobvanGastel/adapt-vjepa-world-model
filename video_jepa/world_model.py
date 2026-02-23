@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from einops import repeat
+from torch.nn import functional as F
 
 from video_jepa.model import VQVAE, ViT, ProprioceptiveEmbedding
 
@@ -13,7 +13,7 @@ class WorldModel(nn.Module):
         video_encoder: nn.Module,
         input_size: tuple[int, int],
         action_dim: int,
-        action_embed_dim: int,
+        normalize_latents: bool = False,
     ):
         super().__init__()
         # Experiment settings
@@ -21,7 +21,7 @@ class WorldModel(nn.Module):
         self.num_pred = num_pred
         self.action_dim = action_dim
         self.input_size = input_size
-        self.action_embed_dim = action_embed_dim
+        self.normalize_latents = normalize_latents
 
         # Encoder, Video JEPA
         self.encoder = video_encoder
@@ -31,19 +31,20 @@ class WorldModel(nn.Module):
 
         self.patch_h = input_size[0] // self.patch_size
         self.patch_w = input_size[1] // self.patch_size
+        self.n_patches = self.patch_h * self.patch_w
 
         # Action encoder
         self.action_encoder = ProprioceptiveEmbedding(
             tubelet_size=self.tubelet_size,
             in_chans=self.action_dim,
-            emb_dim=self.action_embed_dim,
+            emb_dim=self.embed_dim,
         )
 
         # Latent predictor
         self.latent_predictor = ViT(
-            num_patches=self.patch_h * self.patch_w,
+            num_patches=self.n_patches + 1,
             num_frames=self.num_hist,
-            dim=self.embed_dim + self.action_embed_dim,
+            dim=self.embed_dim,
             depth=6,
             heads=16,
             mlp_dim=2048,
@@ -54,11 +55,10 @@ class WorldModel(nn.Module):
         self.predictor_criterion = nn.MSELoss()
 
         # Decoder, same structure as VQVAE
-        self.latent_loss_weight = 0.25
         self.decoder = VQVAE(
-            channel=384,
+            channel=self.n_patches * self.num_pred,
             n_embed=2048,
-            emb_dim=1024,
+            emb_dim=self.embed_dim,
             n_res_block=4,
             n_res_channel=128,
             quantize=False,
@@ -68,73 +68,75 @@ class WorldModel(nn.Module):
 
     def forward(self, x: torch.Tensor, action: torch.Tensor):
         B, C, T, H, W = x.shape
-        z = self.encoder(x)
 
-        # (B, frames, patches, embed_dim)
-        patch_t = z.shape[1] // (self.patch_w * self.patch_h)
-        z = z.reshape(B, patch_t, -1, z.shape[-1])
+        with torch.no_grad():
+            z = self.encoder(x)
 
-        # (B, num_hist or num_pred, num_patches, dim)
-        z_src = z[:, : self.num_hist, :, :]
-        z_tgt = z[:, self.num_pred :, :, :]
+        # Reshape source input
+        z = z.reshape(B, z.shape[1] // (self.n_patches), -1, self.embed_dim)
+        z_src = z[:, : self.num_hist, :, :]  # (B, latents, num_patches, dim)
 
         # Action encoder
-        # (B, frames, action_embed_dim)
+        # (B, T / tubelet_size, embed_dim)
         z_act = self.action_encoder(action)
         z_act = z_act[:, : self.num_hist].unsqueeze(2)
-        z_act_tiled = repeat(z_act, "b t 1 a -> b t f a", f=z_tgt.shape[2])
+        z_src = torch.cat([z_src, z_act], dim=2)  # Add action token to each frame
 
-        # Latent Predictor, ViT
-        # (B, num_pred, num_patches, 2)
-        z_src = torch.cat([z_src, z_act_tiled], dim=3)
+        # Latent Predictor
+        z_pred = self.latent_predictor(z_src.reshape(B, -1, self.embed_dim))
 
-        # (B * frames * num_patches, dim)
-        z_src = z_src.reshape(B, -1, z.shape[-1] + self.action_embed_dim).detach()
-        z_pred = self.latent_predictor(z_src)
+        # Decoder, decode latents
+        z_pred = z_pred.reshape(B, self.num_hist, -1, self.embed_dim)
 
-        # Decoder
-        # TODO: Currently diff_pred is not useful.
+        # Only take the last frame! It is autoregressively generated.
+        # Important to check!
+        z_pred = z_pred[:, -1:]
+
         visual_pred, _ = self.decoder(
-            z.detach(), self.patch_h, self.patch_w, frames_per_latent=self.tubelet_size
+            z_pred[:, :, :-1, :].detach(),  # Remove action token again
+            self.patch_h,
+            self.patch_w,
+            frames_per_latent=self.tubelet_size,
         )
-
-        # Loss
-        # Reshape to (B, tubelet, T, C, H, W) average to fit
-        visual_pred = visual_pred.view(B, -1, C, H, W)
 
         # Decoder loss
-        decoder_loss = self.decoder_criterion(visual_pred, x.moveaxis(1, 2))
+        visual_pred = visual_pred.reshape(B, -1, C, H, W)
+        visual_tgt = x.moveaxis(1, 2)[:, self.num_hist * self.tubelet_size :]
+        decoder_loss = self.decoder_criterion(visual_pred, visual_tgt)
 
         # Predictor loss
-        z_pred = z_pred.reshape(
-            B,
-            self.num_pred,
-            self.patch_w * self.patch_h,
-            self.embed_dim + self.action_embed_dim,
-        )
-        z_pred = z_pred[..., : -self.action_embed_dim]
-        z_loss = self.predictor_criterion(z_pred, z_tgt)
+        z_tgt = z[:, self.num_hist : self.num_hist + self.num_pred]
+        z_pred = z_pred[:, :, :-1, :]  # Remove the last token (the action)
+
+        # Normalize latents should give better performance?
+        if self.normalize_latents:
+            z_pred = F.normalize(z_pred, p=2, dim=-1)
+            z_tgt = F.normalize(z_tgt, p=2, dim=-1)
+        z_loss = self.predictor_criterion(z_pred, z_tgt.detach())
         return z_loss, decoder_loss
 
     @torch.inference_mode()
-    def rollout(self, src_obs, src_act, actions):
+    def rollout(
+        self,
+        src_obs: torch.Tensor,
+        src_act: torch.Tensor,
+        actions: torch.Tensor,
+    ):
         """
-        src_obs : [B, C, K, H, W]
-        src_act : [B, K, A]
+        src_obs : [B, C, T, H, W]
+        src_act : [B, T, A]
         actions : [B, H, A], CEM samples.
         """
-        B = actions.shape[0]
-        H = actions.shape[1]
-        K = src_obs.shape[2]
-        P = self.patch_h * self.patch_w
+        B, H, _ = actions.shape
+        T = src_obs.shape[2]
 
-        # Expand context
-        src_obs = src_obs.expand(B, -1, -1, -1, -1)  # [B, C, K, H, W]
-        src_act = src_act.expand(B, -1, -1)  # [B, K, A]
+        # Expand context to fit sample size
+        src_obs = src_obs.expand(B, -1, -1, -1, -1)
+        src_act = src_act.expand(B, -1, -1)
 
         # Encode the observations
         z = self.encoder(src_obs.float())
-        vid_feats = z.reshape(B, K // self.tubelet_size, P, self.embed_dim)
+        vid_feats = z.reshape(B, T // self.tubelet_size, self.n_patches, self.embed_dim)
 
         # Combine the planned CEM actions
         stacked_act = torch.cat([src_act, actions], dim=1)
@@ -148,19 +150,18 @@ class WorldModel(nn.Module):
             end_frame_idx = (self.num_hist + h) * self.tubelet_size
             start_frame_idx = end_frame_idx - (curr_ctxt_len * self.tubelet_size)
             act_slice = stacked_act[:, start_frame_idx:end_frame_idx]
-            z_act = self.action_encoder(act_slice).unsqueeze(2).repeat(1, 1, P, 1)
 
-            combined = torch.cat([z_ctx, z_act], dim=-1)
-            combined = combined.reshape(B, -1, self.embed_dim + self.action_embed_dim)
+            z_act = self.action_encoder(act_slice).unsqueeze(2)
+            z_src = torch.cat([z_ctx, z_act], dim=2)
 
             # Predict future steps
-            z_next = self.latent_predictor(combined)
-            z_next = z_next.reshape(B, 3, P, -1)[:, 0:1]
-            z_next = z_next[..., : -self.action_embed_dim]
+            z_pred = self.latent_predictor(z_src.reshape(B, -1, self.embed_dim))
+            z_pred = z_pred.reshape(B, self.num_pred, -1, self.embed_dim)
 
-            vid_feats = torch.cat([vid_feats, z_next], dim=1)
+            # last latent, removing action token
+            vid_feats = torch.cat([vid_feats, z_pred[:, -1:, :-1, :]], dim=1)
 
         # Remove historic predictions
-        vid_feats = vid_feats[:, K // self.tubelet_size :]
+        vid_feats = vid_feats[:, T // self.tubelet_size :]
         vid_feats = vid_feats.reshape(B, -1, self.patch_h, self.patch_w, self.embed_dim)
         return vid_feats
