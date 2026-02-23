@@ -15,6 +15,8 @@ Check out the `Exploration.ipynb` notebook for a more detailed walkthrough of th
 
 Check out the `World Model.ipynb` notebook to test the planning of the model. However, the continuous action space is a lot more difficult than the original paper with discrete action space.
 
+(WIP) Fixed autoregressive latent predictor! Again testing the CEM MPC loop.
+
 ## Setup
 Install the packages using the `requirements.txt` file.
 

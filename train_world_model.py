@@ -18,7 +18,7 @@ def train_world_model(config: argparse.Namespace):
         param.requires_grad = False
     video_encoder.eval()
 
-    seq_len = (config.hist_n_frames + config.pred_n_frames) * 2
+    seq_len = (config.hist_n_frames + config.pred_n_frames) * video_encoder.tubelet_size
     train_dataset = PendulumDataset(
         seq_len=seq_len,  # length of historic plus future frame predictions
         input_size=config.crop_size,
@@ -41,7 +41,7 @@ def train_world_model(config: argparse.Namespace):
         video_encoder=video_encoder,
         input_size=config.crop_size,
         action_dim=1,
-        normalize_latents=True,  # Probably necessary to compare structure
+        normalize_latents=False,  # Probably necessary to compare structure
     ).cuda()
 
     optimizer = optim.AdamW(
@@ -68,9 +68,9 @@ def train_world_model(config: argparse.Namespace):
 
         if epoch % 1 == 0:
             latent_param = model.latent_predictor.state_dict()
-            torch.save(latent_param, f"output/latent_predictor1.pt")
-            torch.save(model.action_encoder.state_dict(), f"output/action_emb1.pt")
-            torch.save(model.decoder.state_dict(), f"output/decoder1.pt")
+            torch.save(latent_param, f"output/latent_predictor.pt")
+            torch.save(model.action_encoder.state_dict(), f"output/action_emb.pt")
+            torch.save(model.decoder.state_dict(), f"output/decoder.pt")
 
             logging.info(
                 f"Epoch: {epoch} - predictor loss: {z_loss.item()} - "

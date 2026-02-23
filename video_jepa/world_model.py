@@ -106,7 +106,7 @@ class WorldModel(nn.Module):
 
         # Predictor loss
         z_tgt = z[:, self.num_hist : self.num_hist + self.num_pred]
-        z_pred = z_pred[:, :, :-1, :]  # Remove the last token (the action)
+        z_pred = z_pred[:, :, :-1, :]  # Remove the last action token
 
         # Normalize latents should give better performance?
         if self.normalize_latents:
@@ -156,7 +156,7 @@ class WorldModel(nn.Module):
 
             # Predict future steps
             z_pred = self.latent_predictor(z_src.reshape(B, -1, self.embed_dim))
-            z_pred = z_pred.reshape(B, self.num_pred, -1, self.embed_dim)
+            z_pred = z_pred.reshape(B, self.num_hist, -1, self.embed_dim)
 
             # last latent, removing action token
             vid_feats = torch.cat([vid_feats, z_pred[:, -1:, :-1, :]], dim=1)
