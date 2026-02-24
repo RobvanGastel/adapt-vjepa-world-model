@@ -44,14 +44,15 @@ class CEM:
             eps = torch.randn(
                 (self.num_samples, self.horizon, self.act_dim), device=self.device
             )
-            actions = mu + sigma * eps
-            actions[0] = mu
+            raw_actions = mu + sigma * eps
+            raw_actions[0] = mu
+            actions = torch.tanh(raw_actions) * 2.0
 
             z_y_hat = self.wm.rollout(src_obs, src_act, actions)
 
             dists = torch.mean((z_y_hat[:, -1] - z_g[:, -1]) ** 2, dim=(1, 2, 3))
             _, indices = torch.topk(dists, self.topk, largest=False)
-            elites = actions[indices]
+            elites = raw_actions[indices]
 
             new_mu = elites.mean(dim=0)
             new_sigma = elites.std(dim=0)
@@ -59,7 +60,8 @@ class CEM:
             mu = alpha * new_mu + (1 - alpha) * mu
             sigma = alpha * new_sigma + (1 - alpha) * sigma + 1e-6
 
+        action = torch.tanh(mu[0]) * 2.0
         if return_features:
-            return mu[0], z_y_hat[0]
+            return action, z_y_hat[0]
         else:
-            return mu[0]
+            return action

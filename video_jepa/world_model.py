@@ -84,29 +84,20 @@ class WorldModel(nn.Module):
 
         # Latent Predictor
         z_pred = self.latent_predictor(z_src.reshape(B, -1, self.embed_dim))
-
-        # Decoder, decode latents
         z_pred = z_pred.reshape(B, self.num_hist, -1, self.embed_dim)
 
-        # Only take the last frame! It is autoregressively generated.
-        # Important to check!
-        z_pred = z_pred[:, -1:]
-
-        visual_pred, _ = self.decoder(
-            z_pred[:, :, :-1, :].detach(),  # Remove action token again
-            self.patch_h,
-            self.patch_w,
-            frames_per_latent=self.tubelet_size,
-        )
+        visual_pred, _ = self.decoder(z, self.patch_h, self.patch_w, self.tubelet_size)
 
         # Decoder loss
         visual_pred = visual_pred.reshape(B, -1, C, H, W)
-        visual_tgt = x.moveaxis(1, 2)[:, self.num_hist * self.tubelet_size :]
-        decoder_loss = self.decoder_criterion(visual_pred, visual_tgt)
+        decoder_loss = self.decoder_criterion(visual_pred, x.moveaxis(1, 2))
 
         # Predictor loss
         z_tgt = z[:, self.num_hist : self.num_hist + self.num_pred]
-        z_pred = z_pred[:, :, :-1, :]  # Remove the last action token
+
+        # Only take the last frame! It is autoregressively generated.
+        # Also remove the last action token.
+        z_pred = z_pred[:, -1:, :-1, :]
 
         # Normalize latents should give better performance?
         if self.normalize_latents:
@@ -129,6 +120,10 @@ class WorldModel(nn.Module):
         """
         B, H, _ = actions.shape
         T = src_obs.shape[2]
+
+        ctx_size = src_obs.shape[0]
+        assert ctx_size == 1, "Expand on context observations and actions will break"
+        assert H % self.tubelet_size == 0, "Need horizon % tubelet size == 0"
 
         # Expand context to fit sample size
         src_obs = src_obs.expand(B, -1, -1, -1, -1)
