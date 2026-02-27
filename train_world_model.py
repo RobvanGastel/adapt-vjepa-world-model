@@ -41,8 +41,9 @@ def train_world_model(config: argparse.Namespace):
         video_encoder=video_encoder,
         input_size=config.crop_size,
         action_dim=1,
-        normalize_latents=False,  # Probably necessary to compare structure
+        normalize_latents=False,
     ).cuda()
+    # Normalization probably necessary to focus on structure and not magnitudes.
 
     optimizer = optim.AdamW(
         [
@@ -89,7 +90,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--epochs",
         type=int,
-        default=900,
+        default=2000,
         help="Number of training epochs",
     )
     parser.add_argument(

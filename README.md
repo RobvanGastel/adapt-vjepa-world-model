@@ -15,7 +15,7 @@ Check out the `Exploration.ipynb` notebook for a more detailed walkthrough of th
 
 Check out the `World Model.ipynb` notebook to test the planning of the model. However, the continuous action space is a lot more difficult than the original paper with discrete action space.
 
-(WIP) Fixed autoregressive latent predictor! Again testing the CEM MPC loop.
+(WIP) Currently, have the best working MPC CEM loop for the pendulum so far but it does not always succeed.
 
 ## Setup
 Install the packages using the `requirements.txt` file.
@@ -57,6 +57,8 @@ These are the outputs of training the future latent state predictor and decoder 
 As for the latent state comparison between the predictor and the encoder. These are also comparable.
 ![](/assets/predictor_latent_space.png?raw=true)
 
+A short snippet where it does suceed in balancing the pendulum.
+![](/assets/pendulum.gif?raw=true)
 
 ### References
 Assran, M., Bardes, A., Fan, D., Garrido, Q., Howes, R., Mojtaba, Komeili, Muckley, M., Rizvi, A., Roberts, C., Sinha, K., Zholus, A., Arnaud, S., Gejji, A., Martin, A., Hogan, F. R., Dugas, D., Bojanowski, P., Khalidov, V., … Ballas, N. (2025). V-JEPA 2: Self-Supervised Video Models Enable Understanding, Prediction and Planning (No. arXiv:2506.09985). arXiv. https://doi.org/10.48550/arXiv.2506.09985
